@@ -1,0 +1,19 @@
+# Binaries for local development
+auth-service/auth-service
+user-service/user-service
+
+# Environment variables
+# Ignore all .env files, including at the root
+.env
+*.env
+
+
+# Log files
+*.log
+
+# OS-specific files
+.DS_Store
+
+# Docker
+# Ignore the database data directory
+db_data/

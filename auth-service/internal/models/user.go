@@ -1,0 +1,102 @@
+package models
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/masudcsesust04/golang-jwt-auth/internal/config"
+	"golang.org/x/crypto/bcrypt"
+)
+
+// User represent a user in the system
+type User struct {
+	ID           int64     `json:"id"`
+	FirstName    string    `json:"first_name"`
+	LastName     string    `json:"last_name"`
+	PhoneNumber  string    `json:"phone_number"`
+	Email        string    `json:"email"`
+	Status       string    `json:"status"`
+	Password     string    `json:"password,omitempty"` // plain password, not stored in DB
+	PasswordHash string    `json:"passwrod_hash"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// RefreshToken represents a refresh token in the system
+type RefreshToken struct {
+	ID        int64     `json:"id"`
+	UserID    int64     `json:"user_id"`
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"created_at"`
+	CreatedAt time.Time `json:"updated_at"`
+}
+
+// GetUserByEmail retr4ieves a user by email
+func (u *User) GetUserByEmail(email string) (*User, error) {
+	query := `SELECT id, first_name, last_name, phone_number, email, password_hash, status, created_at, updated_at FROM  users WHERE email = $1`
+	user := &User{}
+
+	err := config.DbConn.GetPool().QueryRow(context.Background(), query, email).Scan(&user.ID, &user.FirstName, &user.LastName, &user.PhoneNumber, &user.Email, &user.PasswordHash, &user.Status, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user by email: %w", err)
+	}
+
+	return user, nil
+}
+
+// CreateUser inserts a new user into the database with password hashing
+func (u *User) RegisterUser(user *User) error {
+	// Ensure status is valid before creating user
+	if user.Status != "active" && user.Status != "inactive" && user.Status != "banned" {
+		user.Status = "active" // Default to active if invalid
+	}
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	user.PasswordHash = string(hashedPassword)
+
+	query := `INSERT INTO users (first_name, last_name, phone_number, email, status, password_hash) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at, updated_at`
+	err = config.DbConn.GetPool().QueryRow(context.Background(), query, user.FirstName, user.LastName, user.PhoneNumber, user.Email, user.Status, user.PasswordHash).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to create user: %w", err)
+	}
+
+	return nil
+}
+
+// CreateRefreshToken inserts a new refresh token into the database
+func (u *User) CreateRefreshToken(rt *RefreshToken) error {
+	query := `INSERT INTO refresh_tokens (user_id, token, expires_at, created_at) VALUES ($1, $2, $3, $4) RETURNING id`
+	err := config.DbConn.GetPool().QueryRow(context.Background(), query, rt.UserID, rt.Token, rt.ExpiresAt, rt.CreatedAt).Scan(&rt.ID)
+	if err != nil {
+		return fmt.Errorf("failed to create refresh token: %w", err)
+	}
+
+	return nil
+}
+
+// GetRefreshToken inserts a new refresh token into the database
+func (u *User) GetRefreshToken(userID int64) (*RefreshToken, error) {
+	query := `SELECT * FROM refresh_tokens WHERE user_id = $1 AND expires_at > NOW() ORDER BY id DESC LIMIT 1`
+	rt := &RefreshToken{}
+	err := config.DbConn.GetPool().QueryRow(context.Background(), query, userID).Scan(&rt.ID, &rt.UserID, &rt.Token, &rt.ExpiresAt, &rt.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get refresh token: %w", err)
+	}
+
+	return rt, nil
+}
+
+// DeleteRefreshToken delete refresh token by user_id
+func (u *User) DeleteRefreshToken(userId int64) error {
+	query := `DELETE FROM refresh_tokens WHERE user_id = $1`
+	_, err := config.DbConn.GetPool().Exec(context.Background(), query, userId)
+	if err != nil {
+		return fmt.Errorf("failed to refresh token: %w", err)
+	}
+
+	return nil
+}

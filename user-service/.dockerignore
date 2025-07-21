@@ -1,0 +1,22 @@
+# Git
+.git
+.gitignore
+
+# Docker
+.dockerignore
+
+# Environment files
+.env
+.env_example
+
+# Documentation
+*.md
+
+# Go build artifacts
+user-service
+
+# Test files
+*_test.go
+
+# Vendor directory
+vendor/
